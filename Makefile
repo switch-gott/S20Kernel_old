@@ -4,6 +4,10 @@ PATCHLEVEL = 19
 SUBLEVEL = 87
 EXTRAVERSION =
 NAME = "People's Front"
+#Build Tools
+TOOLCHAIN_DIR = ../../samsung/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+CLANG_DIR = ../../samsung/toolchains/$(CLANG_VERSION)/bin
+CLANG_VERSION = clang-r353983
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
@@ -209,6 +213,8 @@ VPATH		:= $(srctree)$(if $(KBUILD_EXTMOD),:$(KBUILD_EXTMOD))
 
 export srctree objtree VPATH
 
+CCACHE := $(shell which ccache)
+
 # To make sure we do not include .config for any of the *config targets
 # catch them early, and hand them over to scripts/kconfig/Makefile
 # It is allowed to specify more targets when calling make, including
@@ -220,7 +226,7 @@ export srctree objtree VPATH
 version_h := include/generated/uapi/linux/version.h
 old_version_h := include/linux/version.h
 
-clean-targets := %clean mrproper cleandocs
+clean-targets := %clean mrproper distclean cleandocs
 no-dot-config-targets := $(clean-targets) \
 			 cscope gtags TAGS tags help% %docs check% coccicheck \
 			 $(version_h) headers_% archheaders archscripts \
@@ -319,9 +325,8 @@ include scripts/subarch.include
 # Alternatively CROSS_COMPILE can be set in the environment.
 # Default value for CROSS_COMPILE is not to prefix executables
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
-ARCH		?= $(SUBARCH)
 ARCH            ?= arm64
-CROSS_COMPILE	?= $(srctree)/toolchain/gcc-cfp/gcc-cfp-jopp-only/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+CROSS_COMPILE   ?= $(srctree)/$(TOOLCHAIN_DIR)
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -360,9 +365,9 @@ HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
-HOSTCC       = gcc
-HOSTCXX      = g++
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 \
+HOSTCC       = $(CCACHE) gcc
+HOSTCXX      = $(CCACHE) g++
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -O2 \
 		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) \
 		$(HOSTCFLAGS)
 KBUILD_HOSTCXXFLAGS := -O2 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
@@ -373,7 +378,7 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 #CC		= $(CROSS_COMPILE)gcc
-CC              = $(srctree)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/clang
+CC      = $(CCACHE) $(srctree)/$(CLANG_DIR)/clang
 CPP		= $(CC) -E
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
@@ -398,7 +403,8 @@ export READELF
 endif
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
-		  -Wbitwise -Wno-return-void -Wno-unknown-attribute $(CF)
+		  -Wbitwise -Wno-return-void $(CF)
+#		  -Wbitwise -Wno-return-void -Wno-unknown-attribute $(CF)
 NOSTDINC_FLAGS  =
 CFLAGS_MODULE   =
 AFLAGS_MODULE   =
@@ -425,11 +431,21 @@ LINUXINCLUDE    := \
 		$(USERINCLUDE)
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__
-KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+KBUILD_CFLAGS   := -Wall -Wundef -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common -fshort-wchar \
-		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -Werror \
+#		   -Werror \
+		   -Wno-implicit-function-declaration \
+		   -Wno-misleading-indentation \
+		   -Wno-void-pointer-to-enum-cast \
+		   -Wno-strict-prototypes \
+		   -Wno-ignored-optimization-argument \
+		   -Wno-pointer-to-int-cast \
+		   -Wno-bool-operation \
+		   -Wno-unused-function \
+		   -Wno-unused-variable \
+		   -Wno-declaration-after-statement \
+		   -Wno-pointer-compare \
 		   -std=gnu89
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
@@ -490,11 +506,21 @@ ifneq ($(KBUILD_SRC),)
 	    $(srctree) $(objtree) $(VERSION) $(PATCHLEVEL)
 endif
 
+PLATFORM_VERSION=11
+ANDROID_MAJOR_VERSION=r
+@echo "PLATFORM_VERSION: $(PLATFORM_VERSION)"
+@echo "ANDROID_MAJOR_VERSION: $(ANDROID_MAJOR_VERSION)"
+export PLATFORM_VERSION
+export ANDROID_MAJOR_VERSION
+
 ifeq ($(cc-name),clang)
 ifneq ($(CROSS_COMPILE),)
 #CLANG_TRIPLE	?= $(CROSS_COMPILE)
-CLANG_TRIPLE	?= $(srctree)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/aarch64-linux-gnu-
-CLANG_FLAGS	+= --target=$(notdir $(CLANG_TRIPLE:%-=%))
+#CLANG_TRIPLE	?= $(srctree)/toolchain/clang/host/linux-x86/clang-r349610-jopp/bin/aarch64-linux-gnu-
+CLANG_TRIPLE    ?= $(srctree)/$(CLANG_DIR)/aarch64-linux-gnu-
+# CLANG_TRIPLE	?= $(CROSS_COMPILE)
+CLANG_FLAGS	:= --target=$(notdir $(CLANG_TRIPLE:%-=%))
+#CLANG_FLAGS	+= --target=$(notdir $(CLANG_TRIPLE:%-=%))
 ifeq ($(shell $(srctree)/scripts/clang-android.sh $(CC) $(CLANG_FLAGS)), y)
 $(error "Clang with Android --target detected. Did you specify CLANG_TRIPLE?")
 endif
@@ -507,7 +533,7 @@ CLANG_FLAGS	+= --gcc-toolchain=$(GCC_TOOLCHAIN)
 endif
 # KBUILD_CFLAGS += -Wno-sizeof-pointer-div
 CLANG_FLAGS	+= -no-integrated-as
-CLANG_FLAGS	+= -Werror=unknown-warning-option
+# CLANG_FLAGS	+= -Werror=unknown-warning-option
 KBUILD_CFLAGS	+= $(CLANG_FLAGS)
 KBUILD_AFLAGS	+= $(CLANG_FLAGS)
 export CLANG_FLAGS
@@ -870,7 +896,7 @@ endif
 NOSTDINC_FLAGS += -nostdinc -isystem $(shell $(CC) -print-file-name=include)
 
 # warn about C99 declaration after statement
-KBUILD_CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
+#KBUILD_CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
 
 # disable pointer signed / unsigned warnings in gcc 4.0
 KBUILD_CFLAGS += $(call cc-disable-warning, pointer-sign)
@@ -897,19 +923,19 @@ KBUILD_CFLAGS  += $(call cc-option,-fno-stack-check,)
 KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
 
 # disallow errors like 'EXPORT_GPL(foo);' with missing header
-KBUILD_CFLAGS   += $(call cc-option,-Werror=implicit-int)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=implicit-int)
 
 # require functions to have arguments in prototypes, not empty 'int foo()'
-KBUILD_CFLAGS   += $(call cc-option,-Werror=strict-prototypes)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=strict-prototypes)
 
 # Prohibit date/time macros, which would make the build non-deterministic
-KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
 
 # enforce correct pointer usage
-KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=incompatible-pointer-types)
 
 # Require designated initializers for all marked structures
-KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
+#KBUILD_CFLAGS   += $(call cc-option,-Werror=designated-init)
 
 # change __FILE__ to the relative path from the srctree
 KBUILD_CFLAGS	+= $(call cc-option,-fmacro-prefix-map=$(srctree)/=)
